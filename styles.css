@@ -1,0 +1,15 @@
+.the-archivist-code {
+  font-family: var(--font-monospace);
+  font-size: 1.6em;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+
+.the-archivist-url {
+  font-family: var(--font-monospace);
+  user-select: all;
+}
+
+.the-archivist-status {
+  color: var(--text-muted);
+}
