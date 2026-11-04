@@ -21,6 +21,8 @@ Every Markdown note in the vault, except:
 
 Attachments, PDFs and images aren't synced.
 
+Sync what's worth keeping. Everything you add is searched and curated, so clutter makes your results worse: leave out templates, scratch folders and anything you wouldn't want an answer to come from.
+
 Each vault syncs to one folder in your archive, named `obsidian-` and the vault's name unless you change it.
 
 ## How it syncs

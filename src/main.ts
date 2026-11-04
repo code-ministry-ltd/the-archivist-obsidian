@@ -488,7 +488,7 @@ class ArchivistSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
       .setName("Leave out")
-      .setDesc("Folders or patterns not to sync, one per line, such as a private folder or journal/**/drafts. Obsidian's settings folder, the trash and the attachment folder are always left out.")
+      .setDesc("Folders or patterns not to sync, one per line, such as a private folder or journal/**/drafts. Obsidian's settings folder, the trash and the attachment folder are always left out. Sync what's worth keeping: everything you add is searched and curated, so clutter makes your results worse.")
       .addTextArea((t) =>
         t.setValue(plugin.options.excludes.join("\n")).onChange(async (v) => {
           plugin.options.excludes = v
