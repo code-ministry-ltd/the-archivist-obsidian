@@ -107,6 +107,7 @@ export default class ArchivistPlugin extends Plugin {
         loadCache: () => (this.app.loadLocalStorage(this.key("cache")) as HashCache | null) ?? {},
         saveCache: (cache) => this.app.saveLocalStorage(this.key("cache"), cache),
         confirmDeletion: (count) => confirmDeletion(this.app, count, this.options.root),
+        openApp: (path) => window.open(this.options.baseUrl.replace(/\/+$/, "") + path),
         onState: (state) => this.showState(state),
         onSynced: (last) => {
           this.options.lastSync = last;
@@ -397,7 +398,7 @@ function confirmDeletion(app: App, count: number, root: string): Promise<boolean
   return new ConfirmModal(
     app,
     `Remove ${plural(count, "note")} from your archive?`,
-    `This sync would remove ${plural(count, "note")} from ${root} in your archive, because they're no longer in this vault. If that's not expected (the vault is still loading, or a folder is missing), choose Not now.`,
+    `This sync would remove ${plural(count, "note")} from ${root} in your archive, because they're no longer in this vault. If that's not expected (the vault is still loading, or a folder is missing), choose Not now. If you remove them, your archive may ask you to approve it in the app.`,
     "Remove them",
     "Not now",
     true,

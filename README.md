@@ -29,7 +29,7 @@ Each vault syncs to one folder in your archive, named `obsidian-` and the vault'
 
 - When Obsidian starts, about 2 minutes after you stop editing, and every 15 minutes as a backstop (5, 15, 60 minutes or never).
 - On demand with the command **The Archivist: Sync now**.
-- A note you delete in Obsidian is removed from the archive at the next sync. If a sync would remove more than 20 notes and more than a quarter of the folder, it stops and asks first, in case the vault hasn't finished loading or a folder is missing.
+- A note you delete in Obsidian is removed from the archive at the next sync. If a sync would remove more than 20 notes and more than a quarter of the folder, it stops and asks first, in case the vault hasn't finished loading or a folder is missing. Your archive checks too: if you choose **Remove them**, it may ask you to approve the removal in the app, under Settings → Import → Libraries, and the plugin opens that page for you. The next sync then removes the notes.
 - One device syncs each vault. Connecting a second device for the same vault disconnects the first.
 
 ## Your sign-in
