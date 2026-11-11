@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApi } from "../src/api.ts";
 import { startConnecting, waitForApproval } from "../src/connect.ts";
-import { type Host, type SyncState, SyncController } from "../src/controller.ts";
+import {
+  APPROVAL_MESSAGE,
+  APPROVAL_PATH,
+  type Host,
+  type SyncState,
+  SyncController,
+} from "../src/controller.ts";
 import { buildManifest, type HashCache } from "../src/files.ts";
 import { defaultRoot, excluder, MAX_FILE_BYTES } from "../src/rules.ts";
 import { Scheduler } from "../src/scheduler.ts";
@@ -180,6 +186,7 @@ function host(archive: FakeArchive, vault: FakeVault, overrides: Partial<Host> =
     loadCache: () => cache,
     saveCache: (c) => (cache = c),
     confirmDeletion: async () => false,
+    openApp: () => {},
     onState: (s) => states.push(s),
     onSynced: () => {},
     ...overrides,
@@ -222,6 +229,61 @@ describe("the plugin's state", () => {
     await controller.sync();
     expect(confirm).toHaveBeenCalledTimes(2);
     controller.stop();
+  });
+
+  it("opens the app to approve a removal the archive holds back, then removes the notes without asking again", async () => {
+    const archive = new FakeArchive();
+    const vault = new FakeVault();
+    for (let i = 0; i < 40; i++) vault.write(`n${i}.md`, `note ${i}`);
+    const confirm = vi.fn(async () => true);
+    const openApp = vi.fn();
+    const retry = vi.fn();
+    const { h } = host(archive, vault, { confirmDeletion: confirm, openApp });
+    const controller = new SyncController(h, retry);
+    await controller.sync();
+    archive.holdRemovals = true;
+    for (let i = 0; i < 30; i++) vault.remove(`n${i}.md`);
+
+    await controller.sync();
+    expect(confirm).toHaveBeenCalledWith(30);
+    expect(openApp).toHaveBeenCalledWith(APPROVAL_PATH);
+    expect(APPROVAL_PATH).toBe("/settings/import");
+    expect(controller.state).toEqual({ kind: "attention", message: APPROVAL_MESSAGE });
+    expect(archive.stored.size).toBe(40);
+
+    archive.approved = true;
+    await controller.sync();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(openApp).toHaveBeenCalledTimes(1);
+    expect(archive.stored.size).toBe(10);
+    expect(controller.state).toEqual({ kind: "idle" });
+    expect(retry).not.toHaveBeenCalled();
+    controller.stop();
+  });
+
+  it("says a background sync needs approval, without opening the browser or retrying", async () => {
+    const archive = new FakeArchive();
+    const vault = new FakeVault();
+    for (let i = 0; i < 10; i++) vault.write(`n${i}.md`, `note ${i}`);
+    const openApp = vi.fn();
+    const retry = vi.fn();
+    const { h } = host(archive, vault, { openApp });
+    const controller = new SyncController(h, retry);
+    await controller.sync();
+    vi.useFakeTimers();
+    try {
+      archive.holdRemovals = true;
+      vault.remove("n0.md");
+
+      await controller.sync();
+      expect(controller.state).toEqual({ kind: "attention", message: APPROVAL_MESSAGE });
+      expect(openApp).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      expect(retry).not.toHaveBeenCalled();
+      controller.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("asks to retry later when the archive can't be reached", async () => {

@@ -41,6 +41,9 @@ export class FakeArchive {
   inFlight = 0;
   maxInFlight = 0;
   deviceAnswers: { status: string; token?: string }[] = [];
+  /** Refuse a commit that removes notes until `approved`, as the archive's guard does. */
+  holdRemovals = false;
+  approved = false;
 
   transport: Transport = async (req) => {
     const url = new URL(req.url);
@@ -89,6 +92,15 @@ export class FakeArchive {
     }
     if (url.pathname === "/api/sync/commit") {
       const kept = new Map(this.manifest.map((e) => [e.path, e.hash]));
+      const removing = [...this.stored.keys()].filter((p) => !kept.has(p)).length;
+      if (this.holdRemovals && removing > 0 && !this.approved) {
+        return json(409, {
+          error: {
+            code: "removal_needs_approval",
+            message: `This sync would remove ${removing} documents; approve it in the app.`,
+          },
+        });
+      }
       let added = 0;
       let updated = 0;
       let deleted = 0;

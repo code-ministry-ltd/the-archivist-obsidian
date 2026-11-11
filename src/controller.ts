@@ -37,17 +37,27 @@ export interface Host {
   saveCache(cache: HashCache): void;
   /** Asks before removing many notes; true to go ahead (§5.3). */
   confirmDeletion(count: number): Promise<boolean>;
+  /** Opens a page of the app (at `baseUrl()`) in the browser. */
+  openApp(path: string): void;
   onState(state: SyncState): void;
   onSynced(last: LastSync): void;
 }
 
 const RETRY_MINUTES = [1, 2, 5, 15];
 
+/** Where the app approves a large removal: Settings → Import → Libraries (spec 0005 §11). */
+export const APPROVAL_PATH = "/settings/import";
+
+export const APPROVAL_MESSAGE =
+  "Your archive needs you to approve removing these notes. Choose Remove them on this vault's folder in the app, under Settings → Import → Libraries, and the next sync removes them.";
+
 export class SyncController {
   state: SyncState;
   /** After "Not now" on a large deletion, wait for the next change (§5.3). */
   private heldUntilChange = false;
   private failures = 0;
+  /** Remove them was chosen for this many notes; not asked again while the archive waits. */
+  private confirmedRemoval: number | null = null;
   private retryTimer: number | null = null;
 
   constructor(
@@ -85,14 +95,22 @@ export class SyncController {
       onProgress: (progress: SyncProgress) => this.set({ kind: "syncing", progress }),
     };
     this.set({ kind: "syncing" });
+    let askedToRemove = false;
     try {
       let outcome: SyncOutcome = await syncVault(options);
       if (outcome.status === "needs-confirmation") {
         this.host.saveCache(outcome.cache);
-        this.set({ kind: "waiting", deleteCount: outcome.deleteCount });
-        if (!(await this.host.confirmDeletion(outcome.deleteCount))) {
-          this.heldUntilChange = true;
-          return;
+        const already =
+          this.confirmedRemoval !== null && outcome.deleteCount <= this.confirmedRemoval;
+        if (!already) {
+          this.set({ kind: "waiting", deleteCount: outcome.deleteCount });
+          if (!(await this.host.confirmDeletion(outcome.deleteCount))) {
+            this.confirmedRemoval = null;
+            this.heldUntilChange = true;
+            return;
+          }
+          this.confirmedRemoval = outcome.deleteCount;
+          askedToRemove = true;
         }
         this.set({ kind: "syncing" });
         outcome = await syncVault({ ...options, cache: outcome.cache, allowLargeDeletion: true });
@@ -106,6 +124,7 @@ export class SyncController {
       if (outcome.status !== "synced") return;
       this.host.saveCache(outcome.cache);
       this.failures = 0;
+      this.confirmedRemoval = null;
       const { record } = outcome;
       this.host.onSynced({
         at: new Date().toISOString(),
@@ -118,11 +137,17 @@ export class SyncController {
       });
       this.set({ kind: "idle" });
     } catch (err) {
-      this.failed(err);
+      this.failed(err, askedToRemove);
     }
   }
 
-  private failed(err: unknown) {
+  private failed(err: unknown, askedToRemove = false) {
+    // The archive checks large removals too (spec 0005 §11): they're approved in the app. Only
+    // a Remove them just chosen opens the browser; a background sync just says so.
+    if (err instanceof ApiError && err.code === "removal_needs_approval") {
+      if (askedToRemove) this.host.openApp(APPROVAL_PATH);
+      return this.set({ kind: "attention", message: APPROVAL_MESSAGE });
+    }
     if (err instanceof ApiError && (err.status === 401 || err.code === "wrong_root")) {
       // Revoked in Settings, replaced by another device, or the root was renamed: connect again.
       this.host.setToken(null);
