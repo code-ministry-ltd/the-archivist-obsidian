@@ -1,6 +1,6 @@
 {
   "name": "the-archivist-obsidian",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Obsidian plugin that keeps a vault's notes in The Archivist",
   "scripts": {
     "dev": "node esbuild.config.mjs",
