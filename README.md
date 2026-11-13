@@ -7,6 +7,7 @@ Install it, choose **Connect**, approve this device in your browser, and from th
 ## Before you install
 
 - **You need an account.** The Archivist is in a closed beta; you can [ask for a place](https://the-archivist.cc).
+- **It's a paid service.** During the closed beta, members use it free of charge.
 - **It uses the network.** It sends your vault's Markdown notes (their paths and text) to your archive at `app.the-archivist.cc`, and nowhere else. That's the whole point of the plugin. You can change the address in settings, for development.
 - **No telemetry.** It collects nothing about you or how you use it.
 - **It only reads your vault.** It never changes, moves or deletes a note.
