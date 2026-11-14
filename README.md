@@ -10,7 +10,7 @@ Install it, choose **Connect**, approve this device in your browser, and from th
 - **It's a paid service.** During the closed beta, members use it free of charge.
 - **It uses the network.** It sends your vault's Markdown notes (their paths and text) to your archive at `app.the-archivist.cc`, and nowhere else. That's the whole point of the plugin. You can change the address in settings, for development.
 - **No telemetry.** It collects nothing about you or how you use it.
-- **It only reads your vault.** It never changes, moves or deletes a note.
+- **It only reads your vault.** It lists the vault's files to find the notes to sync, and skips the ones you leave out. It never changes, moves or deletes a note.
 
 ## What it syncs
 
@@ -41,7 +41,7 @@ Connecting gives this device a token that can only sync this vault's folder: it 
 
 Until the plugin is listed in Obsidian's community plugins, install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat): add the beta plugin `code-ministry-ltd/the-archivist-obsidian`.
 
-Needs Obsidian 1.11.4 or later.
+Needs Obsidian 1.13.0 or later.
 
 ## Development
 
@@ -54,7 +54,7 @@ npx eslint .       # Obsidian's own plugin rules
 npm run build
 ```
 
-Copy `main.js`, `manifest.json` and `styles.css` into `<vault>/.obsidian/plugins/the-archivist/` to try a build. To release, run `npm version patch` (or `minor`), then push the tag; the release workflow attaches the files.
+Copy `main.js`, `manifest.json` and `styles.css` into `<vault>/.obsidian/plugins/the-archivist/` to try a build. To release, run `npm version patch` (or `minor`), then push the tag; the release workflow attaches the files with signed build provenance. Check a downloaded file with `gh attestation verify main.js --repo code-ministry-ltd/the-archivist-obsidian`.
 
 The server side lives in The Archivist's own repository: device sign-in and the sync protocol are in its specs 0005 and 0001 §5.5.
 

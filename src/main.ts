@@ -6,6 +6,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  type SettingDefinitionItem,
   TAbstractFile,
   TFile,
   requestUrl,
@@ -229,7 +230,7 @@ export default class ArchivistPlugin extends Plugin {
       );
     } finally {
       this.connecting = false;
-      this.settingTab?.display();
+      this.settingTab?.update();
     }
   }
 
@@ -244,6 +245,7 @@ export default class ArchivistPlugin extends Plugin {
     }
     this.setToken(null);
     this.showState({ kind: "disconnected" });
+    this.settingTab?.update();
     new Notice("Disconnected from The Archivist.");
   }
 
@@ -377,8 +379,8 @@ class ConfirmModal extends Modal {
           this.answer(true);
           this.close();
         });
-        if (this.warning) b.setWarning();
-        else b.setCta();
+        if (this.warning) b.setDestructive();
+        b.setCta();
       })
       .addButton((b) =>
         b.setButtonText(this.no).onClick(() => {
@@ -406,7 +408,7 @@ function confirmDeletion(app: App, count: number, root: string): Promise<boolean
 }
 
 class ArchivistSettingTab extends PluginSettingTab {
-  private statusEl: HTMLElement | null = null;
+  private statusRow: Setting | null = null;
 
   constructor(
     app: App,
@@ -416,124 +418,181 @@ class ArchivistSettingTab extends PluginSettingTab {
   }
 
   refreshStatus() {
-    if (!this.statusEl) return;
+    if (!this.statusRow) return;
     const { state } = this.plugin.controller;
-    const last = this.plugin.options.lastSync;
-    let text = statusText(state, last);
+    let text = statusText(state, this.plugin.options.lastSync);
     if (state.kind === "attention") text = state.message;
     if (state.kind === "disconnected" && state.reason) text = state.reason;
-    this.statusEl.setText(text.charAt(0).toUpperCase() + text.slice(1) + ".");
+    this.statusRow.setDesc(text.charAt(0).toUpperCase() + text.slice(1) + ".");
   }
 
-  display() {
-    const { containerEl } = this;
+  // Declarative (Obsidian 1.13+), so the settings show in Obsidian's settings search. Rows
+  // with buttons or tidying of what's typed render themselves; anything that changes which
+  // rows exist calls update().
+  getSettingDefinitions(): SettingDefinitionItem[] {
     const plugin = this.plugin;
-    containerEl.empty();
-    this.statusEl = containerEl.createEl("p", { cls: "the-archivist-status" });
-    this.refreshStatus();
-
-    new Setting(containerEl).setName("Connection").setHeading();
-    if (plugin.token()) {
-      new Setting(containerEl)
-        .setName("Connected")
-        .setDesc(`As "${plugin.options.device}", syncing this vault to ${plugin.options.root}.`)
-        .addButton((b) => b.setButtonText("Sync now").onClick(() => void plugin.syncNow()))
-        .addButton((b) =>
-          b.setButtonText("Disconnect").onClick(async () => {
-            await plugin.disconnect();
-            this.display();
-          }),
-        );
-    } else {
-      new Setting(containerEl)
-        .setName("Not connected")
-        .setDesc("Approve this device in your browser to start syncing. You need a beta account.")
-        .addButton((b) => b.setButtonText("Connect").setCta().onClick(() => void plugin.connect()));
-    }
-    new Setting(containerEl)
-      .setName("Device name")
-      .setDesc("How this device appears in your archive's settings. Used when you next connect.")
-      .addText((t) =>
-        t.setValue(plugin.options.device).onChange(async (v) => {
-          plugin.options.device = v.trim().slice(0, 60) || plugin.options.device;
-          await plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl).setName("Vault").setHeading();
-    let rootDraft = plugin.options.root;
-    new Setting(containerEl)
-      .setName("Folder in your archive")
-      .setDesc("Lower-case letters, digits, dots, dashes or underscores. Changing it starts a new folder and leaves the old one in the archive.")
-      .addText((t) => t.setValue(plugin.options.root).onChange((v) => (rootDraft = v.trim())))
-      .addButton((b) =>
-        b.setButtonText("Change").onClick(async () => {
-          if (rootDraft === plugin.options.root) return;
-          if (!isValidRoot(rootDraft)) {
-            new Notice("Use lower-case letters, digits, dots, dashes or underscores.");
-            return;
-          }
-          const ok = plugin.options.lastSync
-            ? await new ConfirmModal(
-                this.app,
-                `Sync this vault to ${rootDraft} instead?`,
-                `The notes already in ${plugin.options.root} stay in your archive. You'll connect this device again.`,
-                "Change folder",
-                "Cancel",
-              ).ask()
-            : true;
-          if (!ok) return;
-          await plugin.changeRoot(rootDraft);
-          this.display();
-        }),
-      );
-    new Setting(containerEl)
-      .setName("Leave out")
-      .setDesc("Folders or patterns not to sync, one per line, such as a private folder or journal/**/drafts. Obsidian's settings folder, the trash and the attachment folder are always left out. Sync what's worth keeping: everything you add is searched and curated, so clutter makes your results worse.")
-      .addTextArea((t) =>
-        t.setValue(plugin.options.excludes.join("\n")).onChange(async (v) => {
-          plugin.options.excludes = v
-            .split("\n")
-            .map((l) => l.trim())
-            .filter(Boolean);
-          await plugin.saveSettings();
-        }),
-      );
-    new Setting(containerEl)
-      .setName("Also sync every")
-      .setDesc("Changes sync about 2 minutes after you stop typing. This is a backstop.")
-      .addDropdown((d) =>
-        d
-          .addOptions({ "5": "5 minutes", "15": "15 minutes", "60": "hour", "0": "never" })
-          .setValue(String(plugin.options.intervalMinutes))
-          .onChange(async (v) => {
-            plugin.options.intervalMinutes = Number(v);
-            await plugin.saveSettings();
-          }),
-      );
-
     const last = plugin.options.lastSync;
+    const items: SettingDefinitionItem[] = [
+      {
+        name: "Sync status",
+        searchable: false,
+        render: (setting) => {
+          this.statusRow = setting;
+          this.refreshStatus();
+          return () => {
+            if (this.statusRow === setting) this.statusRow = null;
+          };
+        },
+      },
+      {
+        type: "group",
+        heading: "Connection",
+        items: [
+          plugin.token()
+            ? {
+                name: "Connected",
+                desc: `As "${plugin.options.device}", syncing this vault to ${plugin.options.root}.`,
+                aliases: ["Sync now", "Disconnect"],
+                render: (setting) => {
+                  setting
+                    .addButton((b) => b.setButtonText("Sync now").onClick(() => void plugin.syncNow()))
+                    .addButton((b) => b.setButtonText("Disconnect").onClick(() => void plugin.disconnect()));
+                },
+              }
+            : {
+                name: "Not connected",
+                desc: "Approve this device in your browser to start syncing. You need a beta account.",
+                aliases: ["Connect"],
+                render: (setting) => {
+                  setting.addButton((b) => b.setButtonText("Connect").setCta().onClick(() => void plugin.connect()));
+                },
+              },
+          {
+            name: "Device name",
+            desc: "How this device appears in your archive's settings. Used when you next connect.",
+            render: (setting) => {
+              setting.addText((t) =>
+                t.setValue(plugin.options.device).onChange(async (v) => {
+                  plugin.options.device = v.trim().slice(0, 60) || plugin.options.device;
+                  await plugin.saveSettings();
+                }),
+              );
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Vault",
+        items: [
+          {
+            name: "Folder in your archive",
+            desc: "Lower-case letters, digits, dots, dashes or underscores. Changing it starts a new folder and leaves the old one in the archive.",
+            render: (setting) => {
+              let rootDraft = plugin.options.root;
+              setting
+                .addText((t) => t.setValue(plugin.options.root).onChange((v) => (rootDraft = v.trim())))
+                .addButton((b) => b.setButtonText("Change").onClick(() => void this.changeRoot(rootDraft)));
+            },
+          },
+          {
+            name: "Leave out",
+            desc: "Folders or patterns not to sync, one per line, such as a private folder or journal/**/drafts. Obsidian's settings folder, the trash and the attachment folder are always left out. Sync what's worth keeping: everything you add is searched and curated, so clutter makes your results worse.",
+            aliases: ["Exclude", "Ignore"],
+            render: (setting) => {
+              setting.addTextArea((t) =>
+                t.setValue(plugin.options.excludes.join("\n")).onChange(async (v) => {
+                  plugin.options.excludes = v
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .filter(Boolean);
+                  await plugin.saveSettings();
+                }),
+              );
+            },
+          },
+          {
+            name: "Also sync every",
+            desc: "Changes sync about 2 minutes after you stop typing. This is a backstop.",
+            aliases: ["Interval"],
+            render: (setting) => {
+              setting.addDropdown((d) =>
+                d
+                  .addOptions({ "5": "5 minutes", "15": "15 minutes", "60": "hour", "0": "never" })
+                  .setValue(String(plugin.options.intervalMinutes))
+                  .onChange(async (v) => {
+                    plugin.options.intervalMinutes = Number(v);
+                    await plugin.saveSettings();
+                  }),
+              );
+            },
+          },
+        ],
+      },
+    ];
+
     if (last) {
-      new Setting(containerEl).setName("Last sync").setHeading();
-      containerEl.createEl("p", {
-        text: `${new Date(last.at).toLocaleString()}: ${last.added} added, ${last.updated} updated, ${last.deleted} removed, ${last.skipped} skipped.`,
+      items.push({
+        type: "group",
+        heading: "Last sync",
+        items: [
+          {
+            name: new Date(last.at).toLocaleString(),
+            desc: `${last.added} added, ${last.updated} updated, ${last.deleted} removed, ${last.skipped} skipped.`,
+            searchable: false,
+          },
+          {
+            name: "Not synced, over 10 MB",
+            searchable: false,
+            visible: last.tooLarge.length > 0,
+            render: (setting) => {
+              const list = setting.descEl.createEl("ul");
+              for (const path of last.tooLarge) list.createEl("li", { text: path });
+            },
+          },
+        ],
       });
-      if (last.tooLarge.length > 0) {
-        containerEl.createEl("p", { text: "Not synced, over 10 MB:", cls: "setting-item-description" });
-        const list = containerEl.createEl("ul");
-        for (const path of last.tooLarge) list.createEl("li", { text: path });
-      }
     }
 
-    new Setting(containerEl).setName("Advanced").setHeading();
-    new Setting(containerEl)
-      .setName("Archive address")
-      .setDesc("Only change this for development.")
-      .addText((t) =>
-        t.setValue(plugin.options.baseUrl).onChange(async (v) => {
-          plugin.options.baseUrl = v.trim().replace(/\/+$/, "") || DEFAULT_URL;
-          await plugin.saveSettings();
-        }),
-      );
+    items.push({
+      type: "group",
+      heading: "Advanced",
+      items: [
+        {
+          name: "Archive address",
+          desc: "Only change this for development.",
+          render: (setting) => {
+            setting.addText((t) =>
+              t.setValue(plugin.options.baseUrl).onChange(async (v) => {
+                plugin.options.baseUrl = v.trim().replace(/\/+$/, "") || DEFAULT_URL;
+                await plugin.saveSettings();
+              }),
+            );
+          },
+        },
+      ],
+    });
+    return items;
+  }
+
+  private async changeRoot(rootDraft: string) {
+    const plugin = this.plugin;
+    if (rootDraft === plugin.options.root) return;
+    if (!isValidRoot(rootDraft)) {
+      new Notice("Use lower-case letters, digits, dots, dashes or underscores.");
+      return;
+    }
+    const ok = plugin.options.lastSync
+      ? await new ConfirmModal(
+          this.app,
+          `Sync this vault to ${rootDraft} instead?`,
+          `The notes already in ${plugin.options.root} stay in your archive. You'll connect this device again.`,
+          "Change folder",
+          "Cancel",
+        ).ask()
+      : true;
+    if (!ok) return;
+    await plugin.changeRoot(rootDraft);
+    this.update();
   }
 }
