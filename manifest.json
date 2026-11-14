@@ -2,7 +2,7 @@
   "id": "the-archivist",
   "name": "The Archivist",
   "version": "0.2.0",
-  "minAppVersion": "1.11.4",
+  "minAppVersion": "1.13.0",
   "description": "Keep your vault's notes in The Archivist, your private, searchable lifelong archive.",
   "author": "Code Ministry Ltd",
   "authorUrl": "https://the-archivist.cc",

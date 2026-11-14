@@ -9,7 +9,3 @@
   font-family: var(--font-monospace);
   user-select: all;
 }
-
-.the-archivist-status {
-  color: var(--text-muted);
-}
